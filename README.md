@@ -61,5 +61,5 @@ or from Github via
 devtools::install_github("lbelzile/TruncatedNormal")
 ```
 
-Botev, Z. I., (2016), The normal law under linear restrictions: simulation and estimation via minimax tilting,
-Journal of the Royal Statistical Society Series B, 79, issue 1, p. 125-148
+[Botev, Z. I., (2016), **The normal law under linear restrictions: simulation and estimation via minimax tilting**,
+Journal of the Royal Statistical Society Series B, 79, issue 1, p. 125-148](https://arxiv.org/pdf/1603.04166.pdf)
