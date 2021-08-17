@@ -19,7 +19,7 @@ The Python implementation provided here uses a [modification of the Powell hybri
 
 ## Dependancies
 - [numpy](https://numpy.org)
-- [SciPy](https://docs.scipy.org/doc/scipy/index.html)
+- [SciPy](https://docs.scipy.org/doc/scipy/index.html) (`optimize.root`)
 
 # Example
 ```python
