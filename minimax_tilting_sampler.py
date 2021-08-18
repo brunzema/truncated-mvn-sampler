@@ -56,13 +56,22 @@ class TruncatedMVN:
         self.orig_mu = mu
         self.orig_lb = lb
         self.orig_ub = ub
-        self.lb = lb - mu
-        self.ub = ub - mu
+        
+        # permutated
+        self.lb = lb - mu  # move distr./bounds to have zero mean
+        self.ub = ub - mu  # move distr./bounds to have zero mean
         if np.any(self.ub <= self.lb):
             raise RuntimeError("Upper bound (ub) must be strictly greater than lower bound (lb) for all D dimensions!")
 
-        # scaled Cholesky with zero diagonal
+        # scaled Cholesky with zero diagonal, permutated
         self.L = np.empty_like(cov)
+        self.unscaled_L = np.empty_like(cov)
+
+        # placeholder for optimization
+        self.perm = None
+        self.x = None
+        self.mu = None
+        self.psistar = None
 
         # for numerics
         self.eps = EPS
@@ -75,37 +84,19 @@ class TruncatedMVN:
         :return: D x n array with the samples.
         :rtype: np.ndarray
         """
-        # Cholesky decomposition of matrix with permuation
-        unscaled_L, perm = self.colperm()
-        D = np.diag(unscaled_L)
-        if np.any(D < self.eps):
-            print('Warning: Method might fail as covariance matrix is singular!')
+        if not isinstance(n, int):
+            raise RuntimeError("Number of samples must be an integer!")
 
-        # rescale
-        scaled_L = unscaled_L / np.tile(D.reshape(self.dim, 1), (1, self.dim))
-        self.lb = self.lb / D
-        self.ub = self.ub / D
-        # remove diagonal
-        self.L = scaled_L - np.eye(self.dim)
+        # factors (Cholesky, etc.) only need to be computed once!
+        if self.psistar is None:
+            self.compute_factors()
 
-        # get gradient/Jacobian function
-        gradpsi = self.get_gradient_function()
-        x0 = np.zeros(2 * (self.dim - 1))
-
-        # find optimal tilting parameter non-linear equation solver
-        sol = optimize.root(gradpsi, x0, args=(self.L, self.lb, self.ub), method='hybr', jac=True)
-        if not sol.success:
-            print('Warning: Method may fail as covariance matrix is close to singular!')
-        x = sol.x[:self.dim - 1]
-        mu = sol.x[self.dim - 1:]
-        # compute psi star
-        psistar = self.psy(x, mu)
         # start acceptance rejection sampling
         rv = np.array([], dtype=np.float64).reshape(self.dim, 0)
         accept, iteration = 0, 0
         while accept < n:
-            logpr, Z = self.mvnrnd(n, mu)  # simulate n proposals
-            idx = -np.log(np.random.rand(n)) > (psistar - logpr)  # acceptance tests
+            logpr, Z = self.mvnrnd(n, self.mu)  # simulate n proposals
+            idx = -np.log(np.random.rand(n)) > (self.psistar - logpr)  # acceptance tests
             rv = np.concatenate((rv, Z[:, idx]), axis=1)  # accumulate accepted
             accept = rv.shape[1]  # keep track of # of accepted
             iteration += 1
@@ -117,15 +108,62 @@ class TruncatedMVN:
                 print('Warning: Sample is only approximately distributed.')
 
         # finish sampling and postprocess the samples!
-        order = perm.argsort(axis=0)
+        order = self.perm.argsort(axis=0)
         rv = rv[:, :n]
-        rv = unscaled_L @ rv
+        rv = self.unscaled_L @ rv
         rv = rv[order, :]
 
         # retransfer to original mean
-        tiled_mean = np.tile(self.orig_mu.reshape(self.dim, 1), (1, rv.shape[-1]))
-        rv += tiled_mean
+        rv += np.tile(self.orig_mu.reshape(self.dim, 1), (1, rv.shape[-1]))  # Z = X + mu
         return rv
+    
+    def compute_factors(self):
+        # compute permutated Cholesky factor and solve optimization
+
+        # Cholesky decomposition of matrix with permuation
+        self.unscaled_L, self.perm = self.colperm()
+        D = np.diag(self.unscaled_L)
+        if np.any(D < self.eps):
+            print('Warning: Method might fail as covariance matrix is singular!')
+
+        # rescale
+        scaled_L = self.unscaled_L / np.tile(D.reshape(self.dim, 1), (1, self.dim))
+        self.lb = self.lb / D
+        self.ub = self.ub / D
+
+        # remove diagonal
+        self.L = scaled_L - np.eye(self.dim)
+
+        # get gradient/Jacobian function
+        gradpsi = self.get_gradient_function()
+        x0 = np.zeros(2 * (self.dim - 1))
+
+        # find optimal tilting parameter non-linear equation solver
+        sol = optimize.root(gradpsi, x0, args=(self.L, self.lb, self.ub), method='hybr', jac=True)
+        if not sol.success:
+            print('Warning: Method may fail as covariance matrix is close to singular!')
+        self.x = sol.x[:self.dim - 1]
+        self.mu = sol.x[self.dim - 1:]
+
+        # compute psi star
+        self.psistar = self.psy(self.x, self.mu)
+        
+    def reset(self):
+        # reset factors -> when sampling, optimization for optimal tilting parameters is performed again
+
+        # permutated
+        self.lb = self.orig_lb - self.mu  # move distr./bounds to have zero mean
+        self.ub = self.orig_ub - self.mu
+
+        # scaled Cholesky with zero diagonal, permutated
+        self.L = np.empty_like(self.cov)
+        self.unscaled_L = np.empty_like(self.cov)
+
+        # placeholder for optimization
+        self.perm = None
+        self.x = None
+        self.mu = None
+        self.psistar = None
 
     def mvnrnd(self, n, mu):
         # generates the proposals from the exponentially tilted sequential importance sampling pdf
