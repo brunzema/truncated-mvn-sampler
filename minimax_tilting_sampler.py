@@ -152,8 +152,8 @@ class TruncatedMVN:
         # reset factors -> when sampling, optimization for optimal tilting parameters is performed again
 
         # permutated
-        self.lb = self.orig_lb - self.mu  # move distr./bounds to have zero mean
-        self.ub = self.orig_ub - self.mu
+        self.lb = self.orig_lb - self.orig_mu  # move distr./bounds to have zero mean
+        self.ub = self.orig_ub - self.orig_mu
 
         # scaled Cholesky with zero diagonal, permutated
         self.L = np.empty_like(self.cov)
