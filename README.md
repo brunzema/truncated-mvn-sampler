@@ -1,5 +1,7 @@
 # truncated-mvn-sampler
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-red.svg)](https://github.com/brunzema/truncated-mvn-sampler/blob/main/LICENSE.md)
+
 Efficient sampling from the truncated multivariate Normal distribution.
 
 ## Overview
