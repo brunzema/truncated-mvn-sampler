@@ -1,4 +1,4 @@
-# truncated-mvn-sampler
+# Efficient sampling from the truncated MVN
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-red.svg)](https://github.com/brunzema/truncated-mvn-sampler/blob/main/LICENSE.md)
 
