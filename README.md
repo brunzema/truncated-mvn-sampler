@@ -15,6 +15,8 @@ The main features of this algorithm are:
 
 Feel free to use this code, but don't forget to cite [Botev (2016)](https://arxiv.org/pdf/1603.04166.pdf)!
 
+Also consider checking out our paper ["On Controller Tuning with Time-Varying Bayesian Optimmization" (2022)](https://arxiv.org/abs/2207.11120) and the [corresonding repo](https://github.com/brunzema/uitvbo) where we utilize this sampling method to efficiently tune controllers.
+
 ## Main difference to the orignal MATLAB implementation
 The Python implementation provided here uses a [modification of the Powell hybrid method implemented in SciPy (`method='hybr'`)](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.root.html#r9d4d7396324b-1) for finding the optimal tilting parameter compared to the [Trust-Region-Dogleg Algorithm](https://de.mathworks.com/help/optim/ug/equation-solving-algorithms.html#f51887) used in the MATLAB implementation.
 
