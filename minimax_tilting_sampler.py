@@ -16,6 +16,7 @@ class TruncatedMVN:
     :param np.ndarray cov: (size D x D) covariance of the normal distribution :math:`\mathbf {\Sigma}`.
     :param np.ndarray lb: (size D) lower bound constrain of the multivariate normal distribution :math:`\mathbf lb`.
     :param np.ndarray ub: (size D) upper bound constrain of the multivariate normal distribution :math:`\mathbf ub`.
+    :param int or NoneType seed: a random seed.
 
     Note that the algorithm may not work if 'cov' is close to being rank deficient.
 
@@ -44,7 +45,7 @@ class TruncatedMVN:
     Reimplementation by Paul Brunzema
     """
 
-    def __init__(self, mu, cov, lb, ub):
+    def __init__(self, mu, cov, lb, ub, seed=None):
         self.dim = len(mu)
         if not cov.shape[0] == cov.shape[1]:
             raise RuntimeError("Covariance matrix must be of shape DxD!")
@@ -76,6 +77,9 @@ class TruncatedMVN:
         # for numerics
         self.eps = EPS
 
+        # a random state
+        self.random_state = np.random.RandomState(seed)
+
     def sample(self, n):
         """
         Create n samples from the truncated normal distribution.
@@ -96,7 +100,7 @@ class TruncatedMVN:
         accept, iteration = 0, 0
         while accept < n:
             logpr, Z = self.mvnrnd(n, self.mu)  # simulate n proposals
-            idx = -np.log(np.random.rand(n)) > (self.psistar - logpr)  # acceptance tests
+            idx = -np.log(self.random_state.rand(n)) > (self.psistar - logpr)  # acceptance tests
             rv = np.concatenate((rv, Z[:, idx]), axis=1)  # accumulate accepted
             accept = rv.shape[1]  # keep track of # of accepted
             iteration += 1
@@ -179,13 +183,12 @@ class TruncatedMVN:
             tl = self.lb[k] - mu[k] - col
             tu = self.ub[k] - mu[k] - col
             # simulate N(mu,1) conditional on [tl,tu]
-            Z[k, :] = mu[k] + TruncatedMVN.trandn(tl, tu)
+            Z[k, :] = mu[k] + self.trandn(tl, tu)
             # update likelihood ratio
             logpr += lnNormalProb(tl, tu) + .5 * mu[k] ** 2 - mu[k] * Z[k, :]
         return logpr, Z
 
-    @staticmethod
-    def trandn(lb, ub):
+    def trandn(self, lb, ub):
         """
         Sample generator for the truncated standard multivariate normal distribution :math:`X \sim N(0,I)` s.t.
         :math:`lb<X<ub`.
@@ -212,23 +215,22 @@ class TruncatedMVN:
         if np.any(I):
             tl = lb[I]
             tu = ub[I]
-            x[I] = TruncatedMVN.ntail(tl, tu)
+            x[I] = self.ntail(tl, tu)
         # case 2: lb<ub<-a
         J = ub < -a
         if np.any(J):
             tl = -ub[J]
             tu = -lb[J]
-            x[J] = - TruncatedMVN.ntail(tl, tu)
+            x[J] = - self.ntail(tl, tu)
         # case 3: otherwise use inverse transform or accept-reject
         I = ~(I | J)
         if np.any(I):
             tl = lb[I]
             tu = ub[I]
-            x[I] = TruncatedMVN.tn(tl, tu)
+            x[I] = self.tn(tl, tu)
         return x
 
-    @staticmethod
-    def tn(lb, ub, tol=2):
+    def tn(self, lb, ub, tol=2):
         # samples a column vector of length=len(lb)=len(ub) from the standard multivariate normal distribution
         # truncated over the region [lb,ub], where -a<lb<ub<a for some 'a' and lb and ub are column vectors
         # uses acceptance rejection and inverse-transform method
@@ -240,7 +242,7 @@ class TruncatedMVN:
         if np.any(I):
             tl = lb[I]
             tu = ub[I]
-            x[I] = TruncatedMVN.trnd(tl, tu)
+            x[I] = self.trnd(tl, tu)
 
         # case 2: abs(u-l)<tol, uses inverse-transform
         I = ~I
@@ -249,28 +251,26 @@ class TruncatedMVN:
             tu = ub[I]
             pl = special.erfc(tl / np.sqrt(2)) / 2
             pu = special.erfc(tu / np.sqrt(2)) / 2
-            x[I] = np.sqrt(2) * special.erfcinv(2 * (pl - (pl - pu) * np.random.rand(len(tl))))
+            x[I] = np.sqrt(2) * special.erfcinv(2 * (pl - (pl - pu) * self.random_state.rand(len(tl))))
         return x
 
-    @staticmethod
-    def trnd(lb, ub):
+    def trnd(self, lb, ub):
         # uses acceptance rejection to simulate from truncated normal
-        x = np.random.randn(len(lb))  # sample normal
+        x = self.random_state.randn(len(lb))  # sample normal
         test = (x < lb) | (x > ub)
         I = np.where(test)[0]
         d = len(I)
         while d > 0:  # while there are rejections
             ly = lb[I]
             uy = ub[I]
-            y = np.random.randn(len(uy))  # resample
+            y = self.random_state.randn(len(uy))  # resample
             idx = (y > ly) & (y < uy)  # accepted
             x[I[idx]] = y[idx]
             I = I[~idx]
             d = len(I)
         return x
 
-    @staticmethod
-    def ntail(lb, ub):
+    def ntail(self, lb, ub):
         # samples a column vector of length=len(lb)=len(ub) from the standard multivariate normal distribution
         # truncated over the region [lb,ub], where lb>0 and lb and ub are column vectors
         # uses acceptance-rejection from Rayleigh distr. similar to Marsaglia (1964)
@@ -279,14 +279,14 @@ class TruncatedMVN:
         c = (lb ** 2) / 2
         n = len(lb)
         f = np.expm1(c - ub ** 2 / 2)
-        x = c - np.log(1 + np.random.rand(n) * f)  # sample using Rayleigh
+        x = c - np.log(1 + self.random_state.rand(n) * f)  # sample using Rayleigh
         # keep list of rejected
-        I = np.where(np.random.rand(n) ** 2 * x > c)[0]
+        I = np.where(self.random_state.rand(n) ** 2 * x > c)[0]
         d = len(I)
         while d > 0:  # while there are rejections
             cy = c[I]
-            y = cy - np.log(1 + np.random.rand(d) * f[I])
-            idx = (np.random.rand(d) ** 2 * y) < cy  # accepted
+            y = cy - np.log(1 + self.random_state.rand(d) * f[I])
+            idx = (self.random_state.rand(d) ** 2 * y) < cy  # accepted
             x[I[idx]] = y[idx]  # store the accepted
             I = I[~idx]  # remove accepted from the list
             d = len(I)
