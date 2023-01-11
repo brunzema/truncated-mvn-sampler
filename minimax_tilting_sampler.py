@@ -16,7 +16,7 @@ class TruncatedMVN:
     :param np.ndarray cov: (size D x D) covariance of the normal distribution :math:`\mathbf {\Sigma}`.
     :param np.ndarray lb: (size D) lower bound constrain of the multivariate normal distribution :math:`\mathbf lb`.
     :param np.ndarray ub: (size D) upper bound constrain of the multivariate normal distribution :math:`\mathbf ub`.
-    :param int or NoneType seed: a random seed.
+    :param Union[int, None] seed: a random seed.
 
     Note that the algorithm may not work if 'cov' is close to being rank deficient.
 
