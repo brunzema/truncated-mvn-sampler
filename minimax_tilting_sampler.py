@@ -53,7 +53,8 @@ class TruncatedMVN:
             raise RuntimeError("Dimensions D of mean (mu), covariance matric (cov), lower bound (lb) "
                                "and upper bound (ub) must be the same!")
 
-        self.cov = cov
+        self.orig_cov = cov.copy()  # colperm permutes self.cov in place; keep the caller's array untouched
+        self.cov = cov.copy()
         self.orig_mu = mu
         self.orig_lb = lb
         self.orig_ub = ub
@@ -140,7 +141,9 @@ class TruncatedMVN:
 
         # get gradient/Jacobian function
         gradpsi = self.get_gradient_function()
-        x0 = np.zeros(2 * (self.dim - 1))
+        # start at the conditional means from the variable ordering (x = z, mu = 0) rather than at zero: on
+        # ill-conditioned covariances the solver fails from the zero start
+        x0 = np.concatenate((self.z[:self.dim - 1], np.zeros(self.dim - 1)))
 
         # find optimal tilting parameter non-linear equation solver
         sol = optimize.root(gradpsi, x0, args=(self.L, self.lb, self.ub), method='hybr', jac=True)
@@ -156,6 +159,7 @@ class TruncatedMVN:
         # reset factors -> when sampling, optimization for optimal tilting parameters is performed again
 
         # permutated
+        self.cov = self.orig_cov.copy()  # undo the permutation applied by colperm
         self.lb = self.orig_lb - self.orig_mu  # move distr./bounds to have zero mean
         self.ub = self.orig_ub - self.orig_mu
 
@@ -385,10 +389,11 @@ class TruncatedMVN:
             L[j + 1:self.dim, j] = new_L / L[j, j]
 
             # find mean value, z(j), of truncated normal
-            tl = (self.lb[j] - L[j, 0:j - 1] @ z[0:j - 1]) / L[j, j]
-            tu = (self.ub[j] - L[j, 0:j - 1] @ z[0:j - 1]) / L[j, j]
+            tl = (self.lb[j] - L[j, 0:j] @ z[0:j]) / L[j, j]
+            tu = (self.ub[j] - L[j, 0:j] @ z[0:j]) / L[j, j]
             w = lnNormalProb(tl, tu)  # aids in computing expected value of trunc. normal
             z[j] = (np.exp(-.5 * tl ** 2 - w) - np.exp(-.5 * tu ** 2 - w)) / np.sqrt(2 * math.pi)
+        self.z = z
         return L, perm
 
 
